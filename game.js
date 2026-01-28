@@ -14,10 +14,11 @@ let plane;
 let obstacles = [];
 let cheeses = [];
 let finishLine = null;
-let mixer; // Controlador de animação
+let mixer; 
 
-// Variável para armazenar o modelo do queijo original
+// Modelos 3D Carregados
 let cheeseModelOriginal = null;
+let ctpsModelOriginal = null; 
 
 // Variáveis de Gameplay
 let currentLane = 0; 
@@ -65,7 +66,8 @@ function init() {
 
     createFloor();
     loadPlayerModel();
-    loadCheeseModel(); // Carrega o modelo do queijo
+    loadCheeseModel();
+    loadCtpsModel(); 
 
     window.addEventListener('resize', onWindowResize, false);
     document.addEventListener('keydown', onKeyDown, false);
@@ -90,13 +92,11 @@ function loadPlayerModel() {
     playerGroup = new THREE.Group();
     scene.add(playerGroup);
 
-    // Textura manual do Rato
     const textureLoader = new THREE.TextureLoader();
     const ratTexture = textureLoader.load('textures/CH_Rat_diffuse.png');
     ratTexture.flipY = false; 
 
     const loader = new GLTFLoader();
-    
     loader.load('./rat.gltf', function (gltf) {
         playerMesh = gltf.scene;
         playerMesh.scale.set(1.5, 1.5, 1.5); 
@@ -119,64 +119,103 @@ function loadPlayerModel() {
         const clips = gltf.animations;
         const runClip = THREE.AnimationClip.findByName(clips, 'RatAll_Scamper');
 
-        if (runClip) {
-            mixer.clipAction(runClip).play();
-        } else if (clips.length > 0) {
-            mixer.clipAction(clips[0]).play();
-        }
+        if (runClip) mixer.clipAction(runClip).play();
+        else if (clips.length > 0) mixer.clipAction(clips[0]).play();
 
         resetGame();
-
-    }, undefined, function (error) {
-        console.error('Erro ao carregar o rato:', error);
-    });
+    }, undefined, function (error) { console.error('Erro Rato:', error); });
 }
 
 function loadCheeseModel() {
     const loader = new GLTFLoader();
-    // Carrega da pasta "cheese" que criamos
     loader.load('cheese/cheese.gltf', function (gltf) {
         cheeseModelOriginal = gltf.scene;
-        
-        // Ajuste o tamanho do queijo aqui se ficar muito grande ou pequeno
         cheeseModelOriginal.scale.set(1.5, 1.5, 1.5); 
-        
         cheeseModelOriginal.traverse(function (node) {
             if (node.isMesh) {
                 node.castShadow = true;
-                // Otimização: queijo geralmente brilha um pouco
+                if(node.material) node.material.emissive = new THREE.Color(0x222200);
+            }
+        });
+    }, undefined, function (error) { console.error('Erro Queijo:', error); });
+}
+
+function loadCtpsModel() {
+    const loader = new GLTFLoader();
+    const textureLoader = new THREE.TextureLoader();
+    
+    // Carrega a textura da CAPA
+    const ctpsTexture = textureLoader.load('carteira_trabalho/textures/ctps_capa.png');
+    ctpsTexture.colorSpace = THREE.SRGBColorSpace; 
+    
+    // --- CORREÇÃO DE TEXTURA ---
+    // Giramos a textura 90 graus (-Math.PI/2) para ficar em pé na capa
+    ctpsTexture.center.set(0.5, 0.5); 
+    ctpsTexture.rotation = -Math.PI / 2; 
+    ctpsTexture.flipY = false;
+
+    loader.load('carteira_trabalho/scene.gltf', function (gltf) {
+        ctpsModelOriginal = gltf.scene;
+        
+        // Escala Gigante
+        ctpsModelOriginal.scale.set(25.0, 25.0, 25.0); 
+        
+        ctpsModelOriginal.traverse(function (node) {
+            if (node.isMesh) {
+                node.castShadow = true;
+                node.receiveShadow = true;
                 if(node.material) {
-                    node.material.emissive = new THREE.Color(0x222200);
+                    // Aplica a textura girada diretamente no modelo
+                    node.material.map = ctpsTexture; 
+                    node.material.needsUpdate = true;
+                    // Tira o brilho pra parecer papel
+                    node.material.roughness = 0.9; 
+                    node.material.metalness = 0.0;
                 }
             }
         });
-        console.log("Queijo carregado com sucesso!");
-    }, undefined, function (error) {
-        console.error('Erro ao carregar o queijo:', error);
-    });
+
+        console.log("Carteira carregada em pé com textura corrigida!");
+    }, undefined, function (error) { console.error('Erro CTPS:', error); });
 }
 
 // --- SPAWNERS ---
 
 function spawnObstacle(lane) {
-    const box = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), new THREE.MeshPhongMaterial({ color: 0x8B4513 }));
-    box.position.set(lane * laneWidth, 0.75, -80);
-    box.castShadow = true; scene.add(box); obstacles.push(box);
+    let obstacle;
+
+    if (ctpsModelOriginal) {
+        obstacle = ctpsModelOriginal.clone();
+        
+        // --- CORREÇÃO FINAL DE ROTAÇÃO ---
+        // Aqui voltamos para a rotação que deixou o livro EM PÉ (VERTICAL)
+        obstacle.rotation.set(0, 0, 0); 
+        obstacle.rotation.x = 0;         // Mantém em pé
+        obstacle.rotation.y = Math.PI;   // Vira a capa para a câmera
+        obstacle.rotation.z = 0; 
+
+        // Posição no chão
+        obstacle.position.set(lane * laneWidth, 1.5, -80);
+        
+    } else {
+        obstacle = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), new THREE.MeshPhongMaterial({ color: 0x000088 }));
+        obstacle.position.set(lane * laneWidth, 0.75, -80);
+    }
+
+    obstacle.castShadow = true;
+    scene.add(obstacle);
+    obstacles.push(obstacle);
 }
 
 function spawnCheese(lane) {
     let cheese;
-    
     if (cheeseModelOriginal) {
-        // Se o modelo 3D já carregou, clona ele
         cheese = cheeseModelOriginal.clone();
         cheese.position.set(lane * laneWidth, 0.5, -80);
     } else {
-        // Fallback: Se ainda não carregou, usa a bolinha antiga temporariamente
         cheese = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4, 0), new THREE.MeshPhongMaterial({ color: 0xFFD700 }));
         cheese.position.set(lane * laneWidth, 0.5, -80);
     }
-
     scene.add(cheese);
     cheeses.push(cheese);
 }
@@ -192,15 +231,12 @@ function spawnFinishLine() {
     finishLine.position.set(0, 0, -100); scene.add(finishLine);
 }
 
-// --- CONTROLES E LÓGICA ---
+// --- LÓGICA ---
 
 function onKeyDown(event) {
     if (!gameActive) return;
-    
     if (event.key === 'ArrowLeft' || event.key === 'a' || event.key === 'A') if (currentLane > -1) currentLane--;
     if (event.key === 'ArrowRight' || event.key === 'd' || event.key === 'D') if (currentLane < 1) currentLane++;
-    
-    // PULO
     if ((event.key === ' ' || event.key === 'ArrowUp' || event.key === 'w' || event.key === 'W') && !isJumping) {
         verticalVelocity = jumpStrength;
         isJumping = true;
@@ -213,7 +249,6 @@ function update() {
 
     if (!gameActive) return;
     
-    // Timer
     if (timeLeft > 0) {
         timeLeft -= delta;
         let minutes = Math.floor(timeLeft / 60);
@@ -223,10 +258,8 @@ function update() {
         timeLeft = 0; timerEl.innerText = "⏱️ Tempo: 0:00";
     }
 
-    // Movimento Lateral
     if(playerGroup) playerGroup.position.x += (currentLane * laneWidth - playerGroup.position.x) * 0.1;
 
-    // Física do Pulo
     if (playerGroup) {
         playerGroup.position.y += verticalVelocity;
         verticalVelocity -= gravity;
@@ -237,7 +270,6 @@ function update() {
         }
     }
 
-    // Spawner
     if (timeLeft > 0 && !isFinishLineSpawned) {
         frameCount++;
         if (frameCount % 50 === 0) {
@@ -252,33 +284,21 @@ function update() {
 
 function moveObjects() {
     const playerX = playerGroup ? playerGroup.position.x : 0;
-    const playerY = playerGroup ? playerGroup.position.y : 0; // Altura do pulo
+    const playerY = playerGroup ? playerGroup.position.y : 0;
 
-    // Obstáculos
     for (let i = obstacles.length - 1; i >= 0; i--) {
         let obj = obstacles[i]; obj.position.z += speed;
-        
-        // Colisão (Considerando Pulo)
-        // Se o rato estiver baixo (playerY < 1.0), ele bate
         if (obj.position.z > -1 && obj.position.z < 1) {
-            if (Math.abs(obj.position.x - playerX) < 0.8 && playerY < 1.2) {
+            if (Math.abs(obj.position.x - playerX) < 0.8 && playerY < 2.5) {
                 endGame(false);
             }
         }
         if (obj.position.z > 10) { scene.remove(obj); obstacles.splice(i, 1); }
     }
 
-    // Queijos
     for (let i = cheeses.length - 1; i >= 0; i--) {
-        let obj = cheeses[i]; 
-        obj.position.z += speed; 
-        
-        // Rotação do Queijo (Fica bonito girando)
-        obj.rotation.y += 0.05;
-        
-        // Coleta
+        let obj = cheeses[i]; obj.position.z += speed; obj.rotation.y += 0.05;
         if (obj.position.z > -1 && obj.position.z < 1) {
-            // A área de coleta é um pouco maior, dá pra pegar pulando ou no chão
             if (Math.abs(obj.position.x - playerX) < 0.8 && Math.abs(obj.position.y - playerY) < 1.5) { 
                 scene.remove(obj); cheeses.splice(i, 1); score++; scoreEl.innerText = "🧀 Queijos: " + score; 
             }
@@ -291,8 +311,8 @@ function moveObjects() {
 
 function endGame(win) {
     gameActive = false; screenEl.style.display = 'block'; finalScoreEl.innerText = "Pontuação Final: " + score;
-    if (win) { titleEl.innerText = "PARABÉNS! 🎉"; titleEl.style.color = "#00FF00"; reasonEl.innerText = "Você completou a corrida!"; }
-    else { titleEl.innerText = "BATIDA! 💥"; titleEl.style.color = "#FF0000"; reasonEl.innerText = "O rato bateu numa caixa."; }
+    if (win) { titleEl.innerText = "PARABÉNS! 🎉"; titleEl.style.color = "#00FF00"; reasonEl.innerText = "Você conquistou a aposentadoria!"; }
+    else { titleEl.innerText = "CLT NA VEIA! 💥"; titleEl.style.color = "#FF0000"; reasonEl.innerText = "O rato pegou a carteira de trabalho."; }
 }
 
 function resetGame() {
@@ -301,8 +321,7 @@ function resetGame() {
     obstacles = []; cheeses = []; score = 0; timeLeft = TOTAL_GAME_TIME; speed = 0.25; currentLane = 0; frameCount = 0; isFinishLineSpawned = false;
     scoreEl.innerText = "🧀 Queijos: 0"; screenEl.style.display = 'none';
     if (playerGroup) { playerGroup.position.x = 0; playerGroup.position.y = 0; }
-    gameActive = true;
-    verticalVelocity = 0;
+    gameActive = true; verticalVelocity = 0;
 }
 
 function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
