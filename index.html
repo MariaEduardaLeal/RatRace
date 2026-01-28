@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rat Run - Corrida Final</title>
+    <link rel="stylesheet" href="style.css">
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+</script>
+</head>
+
+<body>
+
+    <div id="ui-container">
+        <div id="score-board">🧀 Queijos: 0</div>
+        <div id="timer-board">⏱️ Tempo: 2:00</div>
+    </div>
+
+    <div id="game-over-screen">
+        <h1 id="end-title">Fim de Jogo!</h1>
+        <p id="end-reason">Motivo</p>
+        <p id="final-score">Pontuação Final: 0</p>
+        <button id="restart-btn">Jogar Novamente</button>
+    </div>
+
+    <script type="module" src="game.js"></script>
+</body>
+
+</html>
